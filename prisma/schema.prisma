@@ -1,0 +1,56 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id        String        @id @default(cuid())
+  email     String        @unique
+  password  String
+  searches  SavedSearch[]
+  createdAt DateTime      @default(now())
+}
+
+model SavedSearch {
+  id            String         @id @default(cuid())
+  userId        String
+  name          String
+  location      String?
+  radiusKm      Int?
+  guests        Int?
+  dateFrom      DateTime?
+  dateTo        DateTime?
+  priceMin      Int?
+  priceMax      Int?
+  active        Boolean        @default(false)
+  createdAt     DateTime       @default(now())
+  user          User           @relation(fields: [userId], references: [id])
+  notifications Notification[]
+}
+
+model Listing {
+  id        String   @id @default(cuid())
+  title     String
+  price     Int
+  rating    Float?
+  distance  Float?
+  url       String
+  images    String?
+  createdAt DateTime @default(now())
+
+  // DODAJ TO VRSTICO:
+  notifications Notification[]
+}
+
+model Notification {
+  id            String      @id @default(cuid())
+  savedSearchId String
+  listingId     String
+  sentAt        DateTime?
+  savedSearch   SavedSearch @relation(fields: [savedSearchId], references: [id])
+  listing       Listing     @relation(fields: [listingId], references: [id])
+}
