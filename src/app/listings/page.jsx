@@ -107,7 +107,10 @@ function handleSortChange(e) {
 
   return (
   <main className="max-w-4xl mx-auto p-6 space-y-6">
-    <h1 className="text-3xl font-bold">Seznam oglasov</h1>
+    <h1 className="text-3xl font-bold">Seznam oglasov je tukaj</h1>
+    <p>
+      
+    </p>
 
     {/* Filtri */}
     <form onSubmit={applyFilters} className="grid gap-3 sm:grid-cols-4">
