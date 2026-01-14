@@ -9,6 +9,9 @@ RUN npm ci
 FROM node:20-alpine AS build
 WORKDIR /app
 
+# ✅ Dummy env so Prisma generate doesn't fail during docker build
+ENV DATABASE_URL="postgresql://user:pass@localhost:5432/db"
+
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
