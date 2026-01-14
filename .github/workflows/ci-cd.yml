@@ -12,6 +12,9 @@ jobs:
   build:
     name: Build (Next.js) + artifacts
     runs-on: ubuntu-latest
+    env:
+      # Dummy value just so Prisma can read env("DATABASE_URL") during generate in CI
+      DATABASE_URL: "postgresql://user:pass@localhost:5432/db"
 
     steps:
       - name: Checkout
@@ -23,24 +26,30 @@ jobs:
           node-version: "20"
           cache: "npm"
 
-      # (Opcijsko, ampak pogosto hitreje): dodatni cache za node_modules
       - name: Cache node_modules
         uses: actions/cache@v4
         with:
           path: node_modules
           key: node_modules-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
+      # (opcijsko) cache za prisma engine/kliente
+      - name: Cache Prisma
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.prisma
+            ~/.cache/prisma
+          key: prisma-${{ runner.os }}-${{ hashFiles('package-lock.json', 'prisma/schema.prisma') }}
+
       - name: Install deps
         run: npm ci
 
-      # Prisma client (ne rabi DB za generate)
       - name: Prisma generate
         run: npx prisma generate
 
       - name: Build
         run: npm run build
 
-      # Artefakti: build rezultat (Next.js)
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
