@@ -5,6 +5,10 @@ on:
     branches: ["main", "production"]
   pull_request:
 
+permissions:
+  contents: read
+  pull-requests: read
+
 env:
   IMAGE_NAME: ${{ secrets.DOCKER_USERNAME }}/rirs-solo
 
@@ -61,10 +65,89 @@ jobs:
             package-lock.json
             next.config.mjs
 
+  sonarcloud:
+    name: SonarCloud analysis
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: Checkout (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node (npm cache)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install deps
+        run: npm ci
+
+      # Opcijsko: če ti to naredi coverage/lcov.info, bo Sonar vzel coverage metriko.
+      # Če ne, analysis vseeno uspe.
+      - name: Run tests with coverage (optional)
+        run: npm test -- --coverage
+        continue-on-error: true
+
+      - name: SonarCloud Scan
+        uses: SonarSource/sonarcloud-github-action@v3
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          SONAR_ORGANIZATION: ${{ vars.SONAR_ORGANIZATION }}
+
+  quality-gate:
+    name: Quality Gate (API) - enforce on Production
+    runs-on: ubuntu-latest
+    needs: sonarcloud
+
+    steps:
+      - name: Check Quality Gate status via SonarCloud API
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          PROJECT_KEY: ${{ vars.SONAR_PROJECT_KEY }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          # enforce gate only for production branch
+          if [ "$BRANCH" != "production" ]; then
+            echo "Not production branch ($BRANCH) -> skipping enforcement."
+            exit 0
+          fi
+
+          echo "Checking SonarCloud Quality Gate for projectKey=$PROJECT_KEY (branch=$BRANCH)"
+
+          # poll a few times because analysis can take a moment to be available
+          for i in 1 2 3 4 5; do
+            RESP=$(curl -sS -u "$SONAR_TOKEN:" \
+              "https://sonarcloud.io/api/qualitygates/project_status?projectKey=$PROJECT_KEY&branch=$BRANCH")
+
+            STATUS=$(echo "$RESP" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')
+
+            echo "Attempt $i: status='$STATUS'"
+
+            if [ "$STATUS" = "OK" ]; then
+              echo "✅ Quality Gate OK -> Production may proceed."
+              exit 0
+            fi
+
+            if [ "$STATUS" = "ERROR" ] || [ "$STATUS" = "WARN" ]; then
+              echo "❌ Quality Gate not OK ($STATUS) -> blocking Production."
+              exit 1
+            fi
+
+            # if status is empty/unknown, wait a bit and retry
+            sleep 5
+          done
+
+          echo "❌ Could not read Quality Gate status after retries -> blocking Production."
+          exit 1
+
   docker:
     name: Docker build + push (dev/prod)
     runs-on: ubuntu-latest
-    needs: build
+    needs: [build, quality-gate]
     if: github.event_name == 'push'
 
     # main -> Development, production -> Production (Production ima required reviewers)
@@ -126,4 +209,3 @@ jobs:
             exit 0
           fi
           curl -X POST "$HOOK"
-
