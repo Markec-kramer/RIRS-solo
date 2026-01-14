@@ -37,4 +37,5 @@ COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/next.config.mjs ./next.config.mjs
 
 EXPOSE 3000
-CMD ["npm", "run", "start"]
+CMD ["sh", "-c", "npx prisma db push && npm run start"]
+
